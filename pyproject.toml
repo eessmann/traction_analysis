@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "dev-stress"
+version = "0.1.0"
+description = ""
+authors = ["Erich Essmann <essmanne@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+pyvista = "^0.42.3"
+numpy = "^1.26.0"
+scipy = "^1.11.3"
+jupyter = "^1.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
