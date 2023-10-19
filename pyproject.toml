@@ -12,7 +12,11 @@ pyvista = "^0.42.3"
 numpy = "^1.26.0"
 scipy = "^1.11.3"
 jupyter = "^1.0.0"
+tqdm = ">=4.66"
+pandas = "^2.1.1"
 
+[tool.poetry.scripts]
+traction-analysis = "traction_analysis.__init__:main"
 
 [build-system]
 requires = ["poetry-core"]

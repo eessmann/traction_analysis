@@ -1,5 +1,10 @@
 import pyvista as pv
 import numpy as np
+import tqdm as tm
+import pandas as pd
+import pathlib
+import os
+import re
 
 
 class TractionAnalysis:
@@ -144,15 +149,70 @@ class TractionAnalysis:
         return total_traction, total_dev_force, total_press_force
 
 
+def isEmptyDir(path: pathlib.Path):
+    """Check if the directory at the given path is empty."""
+    return path.exists() and path.is_dir() and not os.listdir(path)
+
+
+# Recursively convert all fluid VTK file into new format
+def convert_sim_dirs(input_path: str):
+    sim_particle_pattern = re.compile(r"Particles_t(?P<timestep>\d+).vtp")
+    sim_root = pathlib.Path(input_path)
+
+    def parse_sim_filename(pattern, key: str, file: str):
+        res = pattern.search(file)
+        return int(res.group(key))
+
+    def conversion(path, files, pattern, conversion_func):
+        # Parse the time steps of the simulation
+        time_steps = sorted(list(set([parse_sim_filename(pattern, 'timestep', file) for file in files])))
+        # Convert all fluid vtk files in VTKDirectory
+        conversion_func(time_steps, path)
+
+    for root, _, files in tm.tqdm(os.walk(input_path), desc="Walking Simulation Directory tree", position=0):
+        path = pathlib.Path(root)
+        if (os.path.basename(path) == 'VTKParticles') and not isEmptyDir(path):
+            conversion(path, files, sim_particle_pattern, particle_force_timeseries)
+
+
+def particle_force_timeseries(timesteps, path):
+    traction_forces = []
+    press_forces = []
+    dev_forces = []
+    for timestep in tm.tqdm(timesteps, desc="Timestep", position=1, leave=False):
+        particle_path = path / f"Particles_t{timestep}.vtp"
+        fluid_path = path.parent / "VTKFluid" / f"Fluid_t{timestep}.vtr"
+        converted_path = path.parent / "converted" / f"Particles_t{timestep}.vtp"
+
+        processor = TractionAnalysis(fluid_path, particle_path)
+        processor.process()
+        traction, dev_force, press_force = processor.integrate_forces()
+        traction_forces.append(traction)
+        dev_forces.append(dev_force)
+        press_forces.append(press_force)
+
+        processor.save(converted_path)
+
+    d = {"timestep": timesteps, "traction_forces": traction_forces, "press_forces": press_forces, "dev_forces": dev_forces}
+    data = pd.DataFrame(data=d)
+    data.to_csv(path.parent / "converted" / "data.csv")
+    data.to_hdf(path.parent / "converted" / "data.h5")
+    return data
+
+
 # For testing purposes, using the main function
 def main():
     processor = TractionAnalysis(
         "/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4/VTKFluid/Fluid_t200000.vtr",
         "/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4/VTKParticles/Particles_t200000.vtp")
+
     processor.process()
     traction, dev_force, total_press_force = processor.integrate_forces()
     print(f"traction -> {traction}\ndev -> {dev_force}\npress -> {total_press_force}\n")
     processor.save('test.vtp')
+
+    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4")
+    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/centre")
 
 
 # The main function call remains the same
