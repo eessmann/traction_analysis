@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "dev-stress"
+name = "traction-analysis"
 version = "0.1.0"
 description = ""
 authors = ["Erich Essmann <essmanne@gmail.com>"]
