@@ -196,7 +196,7 @@ def particle_force_timeseries(timesteps, path):
     d = {"timestep": timesteps, "traction_forces": traction_forces, "press_forces": press_forces, "dev_forces": dev_forces}
     data = pd.DataFrame(data=d)
     data.to_csv(path.parent / "converted" / "data.csv")
-    data.to_hdf(path.parent / "converted" / "data.h5")
+    data.to_hdf(path.parent / "converted" / "data.h5", "traction", mode="w")
     return data
 
 
@@ -212,7 +212,7 @@ def main():
     processor.save('test.vtp')
 
     convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4")
-    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/centre")
+    #convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/centre")
 
 
 # The main function call remains the same
