@@ -2,6 +2,7 @@ import pyvista as pv
 import numpy as np
 import tqdm as tm
 import pandas as pd
+import argparse as ap
 import pathlib
 import os
 import re
@@ -83,18 +84,16 @@ class TractionAnalysis:
         - TractionAnalysis: self for chaining.
         """
         try:
-            traction = np.empty((0, 3))
-            dev_force = np.empty((0, 3))
-            press_force = np.empty((0, 3))
-            for stress, normal, press in zip(self.resampled_mesh.point_data["viscousStressTensor"],
-                                             self.resampled_mesh.point_normals,
-                                             self.resampled_mesh.point_data["pressure"]):
-                viscous_stress = stress.reshape((3, 3))
-                press_tensor = np.identity(3) * press
-                traction_tensor = viscous_stress + press_tensor
-                traction = np.vstack((traction, traction_tensor @ normal))
-                dev_force = np.vstack((dev_force, viscous_stress @ normal))
-                press_force = np.vstack((press_force, press_tensor @ normal))
+            viscous_stress = np.array(self.resampled_mesh.point_data["viscousStressTensor"]).reshape(-1, 3, 3)
+            normals = np.array(self.resampled_mesh.point_normals)
+            pressure = np.array(self.resampled_mesh.point_data["pressure"]).reshape(-1, 1, 1)
+
+            press_tensor = np.identity(3) * pressure
+            traction_tensor = viscous_stress + press_tensor
+
+            traction = np.einsum('ijk,ik->ij', traction_tensor, normals)
+            dev_force = np.einsum('ijk,ik->ij', viscous_stress, normals)
+            press_force = np.einsum('ijk,ik->ij', press_tensor, normals)
 
             self.resampled_mesh.point_data["traction"] = traction
             self.resampled_mesh.point_data["devForce"] = dev_force
@@ -134,24 +133,23 @@ class TractionAnalysis:
         Returns:
         - List of total traction, dev force, and press forces
         """
-        total_traction = 0
-        total_press_force = 0
-        total_dev_force = 0
+        weights = np.array(self.resampled_mesh.point_data["weights"]).reshape(-1,
+                                                                              1)  # Reshape weights to align with forces
+        traction = np.array(self.resampled_mesh.point_data["traction"])
+        press_force = np.array(self.resampled_mesh.point_data["pressForce"])
+        dev_force = np.array(self.resampled_mesh.point_data["devForce"])
 
-        for weight, traction, press, dev in zip(self.resampled_mesh.point_data["weights"],
-                                                self.resampled_mesh.point_data["traction"],
-                                                self.resampled_mesh.point_data["pressForce"],
-                                                self.resampled_mesh.point_data["devForce"]):
-            total_traction += weight * traction
-            total_press_force += weight * press
-            total_dev_force += weight * dev
+        # Use NumPy's sum method to compute the sum along the desired axis
+        total_traction = np.sum(weights * traction, axis=0)
+        total_press_force = np.sum(weights * press_force, axis=0)
+        total_dev_force = np.sum(weights * dev_force, axis=0)
 
         return total_traction, total_dev_force, total_press_force
 
 
-def isEmptyDir(path: pathlib.Path):
+def is_empty_dir(path: pathlib.Path) -> bool:
     """Check if the directory at the given path is empty."""
-    return path.exists() and path.is_dir() and not os.listdir(path)
+    return path.is_dir() and not any(path.iterdir())
 
 
 # Recursively convert all fluid VTK file into new format
@@ -171,14 +169,14 @@ def convert_sim_dirs(input_path: str):
 
     for root, _, files in tm.tqdm(os.walk(input_path), desc="Walking Simulation Directory tree", position=0):
         path = pathlib.Path(root)
-        if (os.path.basename(path) == 'VTKParticles') and not isEmptyDir(path):
+        if (os.path.basename(path) == 'VTKParticles') and not is_empty_dir(path):
             conversion(path, files, sim_particle_pattern, particle_force_timeseries)
 
 
 def particle_force_timeseries(timesteps, path):
-    traction_forces = []
-    press_forces = []
-    dev_forces = []
+    traction_forces_list = []
+    press_forces_list = []
+    dev_forces_list = []
     for timestep in tm.tqdm(timesteps, desc="Timestep", position=1, leave=False):
         particle_path = path / f"Particles_t{timestep}.vtp"
         fluid_path = path.parent / "VTKFluid" / f"Fluid_t{timestep}.vtr"
@@ -187,32 +185,33 @@ def particle_force_timeseries(timesteps, path):
         processor = TractionAnalysis(fluid_path, particle_path)
         processor.process()
         traction, dev_force, press_force = processor.integrate_forces()
-        traction_forces.append(traction)
-        dev_forces.append(dev_force)
-        press_forces.append(press_force)
+        traction_forces_list.append(traction)
+        dev_forces_list.append(dev_force)
+        press_forces_list.append(press_force)
 
         processor.save(converted_path)
 
-    d = {"timestep": timesteps, "traction_forces": traction_forces, "press_forces": press_forces, "dev_forces": dev_forces}
+    # Converting List to Numpy array
+    traction_forces = np.array(traction_forces_list)
+    dev_forces = np.array(dev_forces_list)
+    press_forces = np.array(press_forces_list)
+
+    d = {"timestep": timesteps,
+         "traction_forces_x": traction_forces[:, 0], "traction_forces_y": traction_forces[:, 1],
+         "traction_forces_z": traction_forces[:, 2],
+         "press_forces_x": press_forces[:, 0], "press_forces_y": press_forces[:, 1],
+         "press_forces_z": press_forces[:, 2],
+         "dev_forces_x": dev_forces[:, 0], "dev_forces_y": dev_forces[:, 1], "dev_forces_z": dev_forces[:, 2]}
     data = pd.DataFrame(data=d)
-    data.to_csv(path.parent / "converted" / "data.csv")
-    data.to_hdf(path.parent / "converted" / "data.h5", "traction", mode="w")
+    data.to_csv(path.parent / "converted" / "force_analysis.csv", index=False)
+    data.to_hdf(path.parent / "converted" / "force_analysis.h5", "traction", mode="w")
     return data
 
 
 # For testing purposes, using the main function
 def main():
-    processor = TractionAnalysis(
-        "/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4/VTKFluid/Fluid_t200000.vtr",
-        "/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4/VTKParticles/Particles_t200000.vtp")
-
-    processor.process()
-    traction, dev_force, total_press_force = processor.integrate_forces()
-    print(f"traction -> {traction}\ndev -> {dev_force}\npress -> {total_press_force}\n")
-    processor.save('test.vtp')
-
-    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/z4")
-    #convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted/centre")
+    parser = ap.ArgumentParser(prog="traction_analysis", description="Particle force analysis script")
+    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted")
 
 
 # The main function call remains the same

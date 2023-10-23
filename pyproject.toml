@@ -8,12 +8,12 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.13"
-pyvista = "^0.42.3"
-numpy = "^1.26.0"
-scipy = "^1.11.3"
-jupyter = "^1.0.0"
+numpy = ">=1.26"
+scipy = ">=1.11"
 tqdm = ">=4.66"
 pandas = {extras = ["hdf5"], version = ">=2.1"}
+pyvista = {extras = ["all"], version = ">=0.42"}
+jupyter = {extras = ["all"], version = "^1.0.0"}
 
 [tool.poetry.scripts]
 traction-analysis = "traction_analysis.__init__:main"
