@@ -211,7 +211,7 @@ def particle_force_timeseries(timesteps, path):
 # For testing purposes, using the main function
 def main():
     parser = ap.ArgumentParser(prog="traction_analysis", description="Particle force analysis script")
-    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_converted")
+    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_test")
 
 
 # The main function call remains the same
