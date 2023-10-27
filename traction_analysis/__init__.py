@@ -3,6 +3,8 @@ import numpy as np
 import tqdm as tm
 import pandas as pd
 import argparse as ap
+import nctoolkit as nc
+import xarray as xa
 import pathlib
 import os
 import re
@@ -204,7 +206,9 @@ def particle_force_timeseries(timesteps, path):
          "dev_forces_x": dev_forces[:, 0], "dev_forces_y": dev_forces[:, 1], "dev_forces_z": dev_forces[:, 2]}
     data = pd.DataFrame(data=d)
     data.to_csv(path.parent / "converted" / "force_analysis.csv", index=False)
-    data.to_hdf(path.parent / "converted" / "force_analysis.h5", "traction", mode="w")
+    ds = nc.from_xarray(data.to_xarray())
+    ds.zip()
+    ds.to_nc(path.parent / "converted" / "force_analysis.nc", overwrite=True)
     return data
 
 
