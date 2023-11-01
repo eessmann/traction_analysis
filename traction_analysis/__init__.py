@@ -3,6 +3,7 @@ import numpy as np
 import tqdm as tm
 import pandas as pd
 import argparse as ap
+import pyarrow.feather as feather
 import pathlib
 import os
 import re
@@ -177,10 +178,14 @@ def particle_force_timeseries(timesteps, path):
     traction_forces_list = []
     press_forces_list = []
     dev_forces_list = []
+
+    results_dir = path.parent / "converted/"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
     for timestep in tm.tqdm(timesteps, desc="Timestep", position=1, leave=False):
         particle_path = path / f"Particles_t{timestep}.vtp"
         fluid_path = path.parent / "VTKFluid" / f"Fluid_t{timestep}.vtr"
-        converted_path = path.parent / "converted" / f"Particles_t{timestep}.vtp"
+        converted_path = results_dir / f"Particles_t{timestep}.vtp"
 
         processor = TractionAnalysis(fluid_path, particle_path)
         processor.process()
@@ -203,15 +208,27 @@ def particle_force_timeseries(timesteps, path):
          "press_forces_z": press_forces[:, 2],
          "dev_forces_x": dev_forces[:, 0], "dev_forces_y": dev_forces[:, 1], "dev_forces_z": dev_forces[:, 2]}
     data = pd.DataFrame(data=d)
-    data.to_csv(path.parent / "converted" / "force_analysis.csv", index=False)
-    data.to_hdf(path.parent / "converted" / "force_analysis.h5", key="traction_forces", mode="w", complevel=9, complib="bzip2", format="fixed")
+    data.to_csv(results_dir / "force_analysis.csv", index=False)
+    feather.write_feather(data, results_dir / "force_analysis.fea")
     return data
+
+
+def dir_path(input: str) -> pathlib.Path:
+    """Check if the given path is a valid directory."""
+    path = pathlib.Path(input)
+    if path.is_dir():
+        return path
+    else:
+        raise ap.ArgumentTypeError(f"readable_dir:{input} is not a valid path")
 
 
 # For testing purposes, using the main function
 def main():
+    """Main function to start the script."""
     parser = ap.ArgumentParser(prog="traction_analysis", description="Particle force analysis script")
-    convert_sim_dirs("/home/data/analysis/Simulation/pressure_analysis/pressure_analysis_test")
+    parser.add_argument("-i", "--input", type=dir_path, required=True, help="Root directory of simulation campaign")
+    args = parser.parse_args()
+    convert_sim_dirs(args.input)
 
 
 # The main function call remains the same
