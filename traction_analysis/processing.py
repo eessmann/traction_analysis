@@ -5,8 +5,8 @@ from pathlib import Path
 
 import tqdm as tm
 
-from analysis import particle_force_timeseries
-from file_handling import dir_path, is_empty_dir
+from traction_analysis.analysis import particle_force_timeseries
+from traction_analysis.file_handling import dir_path, is_empty_dir
 
 
 # Recursively convert all fluid VTK file into new format
@@ -36,4 +36,4 @@ def main():
     parser.add_argument("-i", "--input_path", type=dir_path, required=True,
                         help="Root directory of simulation campaign")
     args = parser.parse_args()
-    convert_sim_dirs(args.input)
+    convert_sim_dirs(args.input_path)

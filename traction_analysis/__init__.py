@@ -1,4 +1,4 @@
-from processing import main
+from traction_analysis.processing import main
 
 # The main function call remains the same
 if __name__ == "__main__":
