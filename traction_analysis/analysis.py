@@ -86,7 +86,7 @@ class TractionAnalysis:
             pressure = np.array(self.resampled_mesh.point_data["pressure"]).reshape(-1, 1, 1)
 
             press_tensor = np.identity(3) * pressure
-            traction_tensor = viscous_stress + press_tensor
+            traction_tensor = viscous_stress - press_tensor
 
             traction = np.einsum('ijk,ik->ij', traction_tensor, normals)
             dev_force = np.einsum('ijk,ik->ij', viscous_stress, normals)
