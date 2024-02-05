@@ -61,6 +61,9 @@ class TractionAnalysis:
         - TractionAnalysis: self for chaining.
         """
         try:
+            if self.resampled_mesh is None:
+                raise ValueError("Mesh data has not been resampled with fluid data.")
+
             weights = np.zeros(self.resampled_mesh.n_points)
             for cell in self.resampled_mesh.cell:
                 vec_a = cell.points[1] - cell.points[0]
@@ -81,6 +84,9 @@ class TractionAnalysis:
         - TractionAnalysis: self for chaining.
         """
         try:
+            if self.resampled_mesh is None:
+                raise ValueError("Mesh data has not been resampled with fluid data.")
+
             viscous_stress = np.array(self.resampled_mesh.point_data["viscousStressTensor"]).reshape(-1, 3, 3)
             normals = np.array(self.resampled_mesh.point_normals)
             pressure = np.array(self.resampled_mesh.point_data["pressure"]).reshape(-1, 1, 1)
@@ -143,11 +149,39 @@ class TractionAnalysis:
 
         return total_traction, total_dev_force, total_press_force
 
+    def integrate_torque(self):
+        """
+        Integrate the torque over the mesh.
+
+        Returns:
+        - Total traction torque
+        """
+        weights = np.array(self.resampled_mesh.point_data["weights"]).reshape(-1, 1)  # Reshape weights to align with forces
+        traction = np.array(self.resampled_mesh.point_data["traction"])
+
+        # Compute the relative positions of the node to the mesh center
+        rel_pos = self.resampled_mesh.points - self.resampled_mesh.center
+
+        # Calculate torques for the mesh
+        torques = np.cross(rel_pos, traction)
+
+        # Append torques to vtk file
+        self.resampled_mesh.point_data["torque"] = torques
+
+        # Total torque
+        total_torque = np.sum(weights * torques, axis=0)
+        return total_torque
+
+
+
+
+
 
 def particle_force_timeseries(timesteps, path):
     traction_forces_list = []
     press_forces_list = []
     dev_forces_list = []
+    torques_list = []
 
     results_dir = path.parent / "converted/"
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -160,9 +194,11 @@ def particle_force_timeseries(timesteps, path):
         processor = TractionAnalysis(fluid_path, particle_path)
         processor.process()
         traction, dev_force, press_force = processor.integrate_forces()
+        torque = processor.integrate_torque()
         traction_forces_list.append(traction)
         dev_forces_list.append(dev_force)
         press_forces_list.append(press_force)
+        torques_list.append(torque)
 
         processor.save(converted_path)
 
