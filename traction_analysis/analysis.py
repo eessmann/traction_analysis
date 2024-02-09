@@ -1,7 +1,7 @@
-import pyvista as pv
 import numpy as np
 import pandas as pd
 import pyarrow.feather as feather
+import pyvista as pv
 import tqdm as tm
 
 
@@ -156,7 +156,8 @@ class TractionAnalysis:
         Returns:
         - Total traction torque
         """
-        weights = np.array(self.resampled_mesh.point_data["weights"]).reshape(-1, 1)  # Reshape weights to align with forces
+        weights = np.array(self.resampled_mesh.point_data["weights"]).reshape(-1,
+                                                                              1)  # Reshape weights to align with forces
         traction = np.array(self.resampled_mesh.point_data["traction"])
 
         # Compute the relative positions of the node to the mesh center
@@ -172,9 +173,29 @@ class TractionAnalysis:
         total_torque = np.sum(weights * torques, axis=0)
         return total_torque
 
+    def compute_stresslet(self):
+        """
+        Calculate the stresslet tensor for the traction forces acting on the mesh.
+        """
+        if self.resampled_mesh is None:
+            raise ValueError("Mesh data has not been resampled with fluid data.")
 
+        # Calculate position vectors relative to the geometric center for all points
+        rel_pos = self.resampled_mesh.points - self.resampled_mesh.center
 
+        # Extract traction forces for all points
+        traction_forces = self.resampled_mesh.point_data['traction']
 
+        # Extract the area (weight) for each point
+        areas = self.resampled_mesh.point_data['weights']
+
+        # Calculate the dyadic product of position vectors and traction forces
+        # and then weight by area
+        # 'ij,ik,i->jk' computes the outer product for each pair of vectors, sums over i (all points)
+        # and weights each term by area[i] before summing.
+        stresslet = np.einsum('ij,ik,i->jk', rel_pos, traction_forces, areas)
+
+        return stresslet
 
 
 def particle_force_timeseries(timesteps, path):
@@ -182,6 +203,7 @@ def particle_force_timeseries(timesteps, path):
     press_forces_list = []
     dev_forces_list = []
     torques_list = []
+    stresslet_list = []
 
     results_dir = path.parent / "converted/"
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -195,10 +217,12 @@ def particle_force_timeseries(timesteps, path):
         processor.process()
         traction, dev_force, press_force = processor.integrate_forces()
         torque = processor.integrate_torque()
+        stresslet = processor.compute_stresslet()
         traction_forces_list.append(traction)
         dev_forces_list.append(dev_force)
         press_forces_list.append(press_force)
         torques_list.append(torque)
+        stresslet_list.append(stresslet)
 
         processor.save(converted_path)
 
@@ -206,13 +230,31 @@ def particle_force_timeseries(timesteps, path):
     traction_forces = np.array(traction_forces_list)
     dev_forces = np.array(dev_forces_list)
     press_forces = np.array(press_forces_list)
+    torques = np.array(torques_list)
+    stresslets = np.array(stresslet_list)
 
     d = {"timestep": timesteps,
-         "traction_forces_x": traction_forces[:, 0], "traction_forces_y": traction_forces[:, 1],
+         "traction_forces_x": traction_forces[:, 0],
+         "traction_forces_y": traction_forces[:, 1],
          "traction_forces_z": traction_forces[:, 2],
-         "press_forces_x": press_forces[:, 0], "press_forces_y": press_forces[:, 1],
+         "press_forces_x": press_forces[:, 0],
+         "press_forces_y": press_forces[:, 1],
          "press_forces_z": press_forces[:, 2],
-         "dev_forces_x": dev_forces[:, 0], "dev_forces_y": dev_forces[:, 1], "dev_forces_z": dev_forces[:, 2]}
+         "dev_forces_x": dev_forces[:, 0],
+         "dev_forces_y": dev_forces[:, 1],
+         "dev_forces_z": dev_forces[:, 2],
+         "torques_x": torques[:, 0],
+         "torques_y": torques[:, 1],
+         "torques_z": torques[:, 2],
+         "stresslet_x_x": stresslets[:, 0, 0],
+         "stresslet_x_y": stresslets[:, 0, 1],
+         "stresslet_x_z": stresslets[:, 0, 2],
+         "stresslet_y_x": stresslets[:, 1, 0],
+         "stresslet_y_y": stresslets[:, 1, 1],
+         "stresslet_y_z": stresslets[:, 1, 2],
+         "stresslet_z_x": stresslets[:, 2, 0],
+         "stresslet_z_y": stresslets[:, 2, 1],
+         "stresslet_z_z": stresslets[:, 2, 2]}
     data = pd.DataFrame(data=d)
     data.to_csv(results_dir / "force_analysis.csv", index=False)
     feather.write_feather(data, results_dir / "force_analysis.fea")
