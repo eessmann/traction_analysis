@@ -48,7 +48,8 @@ class TractionAnalysis:
         """
         try:
             cell_fluid = self.fluid
-            self.resampled_mesh = self.mesh.sample(cell_fluid)
+            self.fluid_interpolation()
+            self.resampled_mesh = self.mesh.interpolate(cell_fluid)
         except Exception as e:
             raise ValueError(f"Error during fluid interpolation: {e}")
         return self
@@ -196,6 +197,26 @@ class TractionAnalysis:
         stresslet = np.einsum('ij,ik,i->jk', rel_pos, traction_forces, areas)
 
         return stresslet
+
+    def fluid_interpolation(self, exclusion_threshold = 0):
+        particle_mesh = self.mesh
+        fluid_mesh = self.fluid
+
+        # Compute the signed distance field for the particle mesh
+        distances = fluid_mesh.compute_implicit_distance(particle_mesh, inplace=True)
+        distances.save("/tmp/fluid_test.vtr")
+        print("Saving test data to /tmp/fluid_test.vtr")
+
+        valid_indices = np.where(distances.point_data['implicit_distance'] < exclusion_threshold)
+        valid_fluid_mesh = fluid_mesh.extract_points(valid_indices)
+
+        # Extract the valid fluid data (you'll need to adjust this based on your data structure)
+        valid_fluid_points = valid_fluid_mesh.points
+        valid_data_field = fluid_mesh.interpolate(valid_fluid_mesh, radius=exclusion_threshold).point_data['pressure']
+
+
+
+
 
 
 def particle_force_timeseries(timesteps, path):
