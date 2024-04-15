@@ -3,6 +3,7 @@ import pandas as pd
 import pyarrow.feather as feather
 import pyvista as pv
 import tqdm as tm
+from typing import Callable
 
 
 class TractionAnalysis:
@@ -36,8 +37,41 @@ class TractionAnalysis:
             self.fluid = grid.interpolate(merged)
             self.mesh = pv.read(mesh_path)
             self.resampled_mesh = None
+            self.gauss_points = np.array([
+                [1/6, 1/6],  # (barycentric coordinates)
+                [2/3, 1/6],
+                [1/6, 2/3]
+            ])
+            self.weights = np.array([1/6, 1/6, 1/6])
         except Exception as e:
             raise IOError(f"Error reading VTK files: {e}")
+
+    def gaussian_quadrature(self, interpolator: Callable, initial_value: float | np.ndarray):
+        # Loop through each face of the mesh
+        try:
+            integral_value = type(initial_value)()
+            for cell in self.mesh.cell:
+                face = cell.points
+
+                if len(face) == 3:
+                    v0, v1, v2 = face
+
+                    # Area calculation using cross product
+                    area = np.linalg.norm(np.cross(v1 - v0, v2 - v0)) / 2
+
+                    # Calculate actual positions of the Gauss points on the current triangle
+                    transformed_points = v0 + (v1 - v0) * self.gauss_points [:, 0][:, np.newaxis] + (v2 - v0) * self.gauss_points [:,1][:, np.newaxis]
+
+                    # Calculate integral contribution from this triangle
+                    for point, weight in zip(transformed_points, self.weights):
+                        value = interpolator(point)
+                        integral_value += weight * value * area
+        except Exception as e:
+            raise ValueError(f"Error during integrator: {e}")
+        return integral_value
+
+
+
 
     def fluid_interpolate(self):
         """
