@@ -4,6 +4,7 @@ import pyarrow.feather as feather
 import pyvista as pv
 import tqdm as tm
 from typing import Callable
+import interpolator
 
 
 class TractionAnalysis:
@@ -38,11 +39,11 @@ class TractionAnalysis:
             self.mesh = pv.read(mesh_path)
             self.resampled_mesh = None
             self.gauss_points = np.array([
-                [1/6, 1/6],  # (barycentric coordinates)
-                [2/3, 1/6],
-                [1/6, 2/3]
+                [1 / 6, 1 / 6],  # (barycentric coordinates)
+                [2 / 3, 1 / 6],
+                [1 / 6, 2 / 3]
             ])
-            self.weights = np.array([1/6, 1/6, 1/6])
+            self.weights = np.array([1 / 6, 1 / 6, 1 / 6])
         except Exception as e:
             raise IOError(f"Error reading VTK files: {e}")
 
@@ -60,7 +61,8 @@ class TractionAnalysis:
                     area = np.linalg.norm(np.cross(v1 - v0, v2 - v0)) / 2
 
                     # Calculate actual positions of the Gauss points on the current triangle
-                    transformed_points = v0 + (v1 - v0) * self.gauss_points [:, 0][:, np.newaxis] + (v2 - v0) * self.gauss_points [:,1][:, np.newaxis]
+                    transformed_points = v0 + (v1 - v0) * self.gauss_points[:, 0][:, np.newaxis] + (
+                                v2 - v0) * self.gauss_points[:, 1][:, np.newaxis]
 
                     # Calculate integral contribution from this triangle
                     for point, weight in zip(transformed_points, self.weights):
@@ -69,9 +71,6 @@ class TractionAnalysis:
         except Exception as e:
             raise ValueError(f"Error during integrator: {e}")
         return integral_value
-
-
-
 
     def fluid_interpolate(self):
         """
@@ -232,7 +231,7 @@ class TractionAnalysis:
 
         return stresslet
 
-    def fluid_interpolation(self, exclusion_threshold = 0):
+    def fluid_interpolation(self, exclusion_threshold=0):
         particle_mesh = self.mesh
         fluid_mesh = self.fluid
 
@@ -247,10 +246,6 @@ class TractionAnalysis:
         # Extract the valid fluid data (you'll need to adjust this based on your data structure)
         valid_fluid_points = valid_fluid_mesh.points
         valid_data_field = fluid_mesh.interpolate(valid_fluid_mesh, radius=exclusion_threshold).point_data['pressure']
-
-
-
-
 
 
 def particle_force_timeseries(timesteps, path):
