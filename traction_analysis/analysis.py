@@ -4,7 +4,6 @@ import pyarrow.feather as feather
 import pyvista as pv
 import tqdm as tm
 from typing import Callable
-import interpolator
 
 
 class TractionAnalysis:
@@ -66,7 +65,7 @@ class TractionAnalysis:
 
                     # Calculate integral contribution from this triangle
                     for point, weight in zip(transformed_points, self.weights):
-                        value = interpolator(point)
+                        value = nvi(point)
                         integral_value += weight * value * area
         except Exception as e:
             raise ValueError(f"Error during integrator: {e}")
